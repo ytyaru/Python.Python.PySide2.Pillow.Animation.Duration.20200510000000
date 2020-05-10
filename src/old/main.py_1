@@ -1,0 +1,753 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+import sys, os, numpy, PIL
+from PySide2 import QtCore, QtGui, QtWidgets
+from PIL import Image, ImagePalette
+
+class Window(QtWidgets.QMainWindow):
+    def __init__(self):
+        super(self.__class__, self).__init__()
+        self.setAcceptDrops(True)
+        self.widget = Widget(self)
+        self.setCentralWidget(self.widget)
+
+        menu_file = QtWidgets.QMenu('File', self)
+        menu_file.addAction(self.widget.GraphicsView.Scene.Drawable.SaveAction)
+        self.menuBar().addMenu(menu_file)
+
+        menu_frame = QtWidgets.QMenu('Animation', self)
+        menu_frame.addAction(FrameListView.AddFrameAction)
+        menu_frame.addAction(FrameListView.DeleteFrameAction)
+        self.menuBar().addMenu(menu_frame)
+
+        self.show()
+
+        # Frame側でも使いたいので
+        globals()['Window'] = self
+
+    def mousePressEvent(self, event):
+        super(self.__class__, self).mousePressEvent(event)
+        self.widget.update()
+    def mouseMoveEvent(self, event):
+        super(self.__class__, self).mouseMoveEvent(event)
+        self.widget.update()
+    def dragEnterEvent(self, event):
+        super(self.__class__, self).dragEnterEvent(event)
+        self.widget.update()
+    def dragMoveEvent(self, event):
+        super(self.__class__, self).dragMoveEvent(event)
+    def dropEvent(self, event):
+        super(self.__class__, self).dropEvent(event)
+
+class Widget(QtWidgets.QWidget):
+    def __init__(self, parent):
+        super(self.__class__, self).__init__(parent)
+        self.setAcceptDrops(True)
+        self.view = GraphicView()
+#        self.framelist = FrameListView()
+
+        # DrawableItemで使いたいので
+#        globals()['FrameListView'] = self.framelist
+
+        self.animation = AnimationWidget()
+#        self.animation.setMinimumHeight(self.animation.height())
+#        self.animation.setMaximumHeight(self.animation.height()*1.2)
+        self.animation.setMinimumHeight(32)
+        self.animation.setMaximumHeight(64)
+        self.animation.resize(self.animation.width(), self.animation.height())
+        globals()['AnimationWidget'] = self.animation
+
+        scroller1 = QtWidgets.QScrollArea()
+        scroller1.setWidget(self.view)
+        """
+        scroller2 = QtWidgets.QScrollArea()
+        scroller2.setWidget(self.framelist)
+        scroller2.setMinimumHeight(self.framelist.height())
+        scroller2.setMaximumHeight(self.framelist.height()*1.2)
+        scroller2.resize(self.framelist.width(), self.framelist.height())
+        """
+
+        layout = QtWidgets.QGridLayout()
+        layout.addWidget(scroller1, 0, 0)
+#        layout.addWidget(scroller2, 1, 0)
+        layout.addWidget(self.animation, 1, 0)
+
+        self.setLayout(layout)
+        self.resize(self.view.width(), self.view.height())
+        self.setWindowTitle("QAction")
+        self.show()
+    @property
+    def GraphicsView(self): return self.view
+    def mousePressEvent(self, event):
+        super(self.__class__, self).mousePressEvent(event)
+        self.view.scene().update()
+        self.view.update()
+    def mouseMoveEvent(self, event):
+        super(self.__class__, self).mouseMoveEvent(event)
+        self.view.scene().update()
+        self.view.update()
+    def dragEnterEvent(self, event):
+        super(self.__class__, self).dragEnterEvent(event)
+        self.view.dragEnterEvent(event)
+        self.view.scene().update()
+        self.view.update()
+    def dragMoveEvent(self, event):
+        super(self.__class__, self).dragMoveEvent(event)
+    def dropEvent(self, event):
+        super(self.__class__, self).dropEvent(event)
+
+class GraphicView(QtWidgets.QGraphicsView):
+    def __init__(self):
+        QtWidgets.QGraphicsView.__init__(self)
+        self.setAcceptDrops(True)
+        self.setWindowTitle("QGraphicsScene draw Grid")
+        self.__editorScene = EditorScene(self)
+        self.setScene(self.__editorScene)
+    def mousePressEvent(self, event):
+        super(self.__class__, self).mousePressEvent(event)
+        self.scene().update()
+    def mouseMoveEvent(self, event):
+        super(self.__class__, self).mouseMoveEvent(event)
+        self.scene().update()
+    @property
+    def Scene(self): return self.__editorScene
+    def dragEnterEvent(self, event):
+        super(self.__class__, self).dragEnterEvent(event)
+        self.scene().update()
+    def dragEnterEvent(self, event):
+        super(self.__class__, self).dragMoveEvent(event)
+        self.scene().update()
+    def dropEvent(self, event):
+        super(self.__class__, self).dropEvent(event)
+        self.scene().update()
+
+class EditorScene(QtWidgets.QGraphicsScene):
+    def __init__(self, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.size = 16
+        self.scale = 32
+        self.setSceneRect(0, 0, self.size*self.scale, self.size*self.scale)
+
+        self.grid = GridItem()
+        self.addItem(self.grid)
+
+        self.background = BackgroundItem()
+        self.addItem(self.background)
+
+        self.drawable = DrawableItem()
+        self.addItem(self.drawable)
+
+        self.background.setZValue(0)
+        self.drawable.setZValue(1)
+        self.grid.setZValue(9999)
+
+        # Frame側でも使いたいので
+        globals()['Drawable'] = self.drawable
+
+    def mousePressEvent(self, event):
+        for item in self.items():
+            item.mousePressEvent(event)
+        super(self.__class__, self).mousePressEvent(event)
+    def mouseMoveEvent(self, event):
+        for item in self.items():
+            item.setAcceptHoverEvents(True)
+            item.mouseMoveEvent(event)
+        super(self.__class__, self).mouseMoveEvent(event)
+    def dragEnterEvent(self, event):
+        for item in self.items():
+            item.setAcceptDrops(True)
+            if event is type(QtWidgets.QGraphicsSceneDragDropEvent):
+                item.dragEnterEvent(event)
+        if event is type(QtWidgets.QGraphicsSceneDragDropEvent):
+            super(self.__class__, self).dragEnterEvent(event)
+    def dragMoveEvent(self, event):
+        for item in self.items():
+            item.setAcceptDrops(True)
+            if event is type(QtWidgets.QGraphicsSceneDragDropEvent):
+                item.dragEnterEvent(event)
+        if event is type(QtWidgets.QGraphicsSceneDragDropEvent):
+            super(self.__class__, self).dragEnterEvent(event)
+    def dropEvent(self, event):
+        for item in self.items():
+            item.setAcceptDrops(True)
+            item.dropEvent(event)
+        if event is type(QtWidgets.QGraphicsSceneDragDropEvent):
+            super(self.__class__, self).dropEvent(event)
+    @property
+    def Grid(self): return self.grid
+    @property
+    def Background(self): return self.background
+    @property
+    def Drawable(self): return self.drawable
+
+class DrawableItem(QtWidgets.QGraphicsRectItem):
+    def __init__(self, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+        self.setAcceptHoverEvents(True)
+        self.scale = 32
+        self.pixels = Pixels()
+        self.actions = {}
+        self.__create_save_action()
+
+    def __create_save_action(self):
+        a = QtWidgets.QAction('Save')
+        a.setObjectName('Save')
+        a.setShortcut('Ctrl+S')
+        a.triggered.connect(self.Pixels.save)
+        self.actions['Save'] = a
+
+    def paint(self, painter, option, widget):
+        painter.fillRect(widget.rect(), QtGui.QBrush( QtGui.QColor(0,0,0,0), QtCore.Qt.SolidPattern))
+        for y in range(self.pixels.Height):
+            for x in range(self.pixels.Width):
+                if 1 == self.pixels.Pixels[y][x]:
+                    painter.fillRect(x*self.scale, y*self.scale, self.scale, self.scale, QtGui.QBrush( QtGui.QColor(255,0,0,128), QtCore.Qt.SolidPattern))
+ 
+    def mouseMoveEvent(self, event):
+        pos = event.scenePos()
+        x = int(pos.x()//self.scale)
+        y = int(pos.y()//self.scale)
+        if event.buttons() & QtCore.Qt.LeftButton:
+            self.pixels.Pixels[y][x] = 1
+#            print(x, y, self.pixels.Pixels)
+            for idx in FrameListView.selectedIndexes():
+                FrameListModel.Frames[idx.row()].Pixels.Pixels[y][x] = 1
+                FrameListModel.update_icon(idx)
+#                print(idx.row(), 'Drawable', x, y, FrameListModel.Frames[idx.row()].Pixels.Pixels)
+#                FrameListView.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseButtonPress, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#                FrameListView.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#            FrameListView.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#            FrameListView.update_icon()
+#            FrameListView.update()
+#            FrameListView.repaint()
+            # 再描画。意味不明だがListViewのマウスイベントを発行すればListViewが再描画されることを発見した。なぜかupdate()やrepaint()では一切再描画されない。
+            # だがListViewの先頭項目が選択されてしまう。このせいでバグるため再描画させられない。
+#            super(FrameListView.__class__, FrameListView).mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#            FrameListView.mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+            """
+            FrameListView.update()
+            FrameListView.updateGeometry()
+            FrameListView.repaint()
+            Window.update()
+            Window.repaint()
+            """
+            FrameListView.update()
+            Window.update()
+        if event.buttons() & QtCore.Qt.RightButton:
+            self.pixels.Pixels[y][x] = 0
+            for idx in FrameListView.selectedIndexes():
+                FrameListModel.Frames[idx.row()].Pixels.Pixels[y][x] = 0
+                FrameListModel.update_icon(idx)
+                print(idx.row(), 'Drawable', x, y, FrameListModel.Frames[idx.row()].Pixels.Pixels)
+#            super(FrameListView.__class__, FrameListView).mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#            FrameListView.mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+            """
+            FrameListView.update()
+            FrameListView.updateGeometry()
+            FrameListView.repaint()
+            Window.update()
+            Window.repaint()
+            """
+
+    def mousePressEvent(self, event):
+        pos = event.scenePos()
+        x = int(pos.x()//self.scale)
+        y = int(pos.y()//self.scale)
+        if event.buttons() & QtCore.Qt.LeftButton:
+            self.pixels.Pixels[y][x] = 1
+            for idx in FrameListView.selectedIndexes():
+                FrameListModel.Frames[idx.row()].Pixels.Pixels[y][x] = 1
+                FrameListModel.update_icon(idx)
+                print(idx.row(), 'Drawable', x, y, FrameListModel.Frames[idx.row()].Pixels.Pixels)
+#            super(FrameListView.__class__, FrameListView).mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#            FrameListView.mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+            """
+            FrameListView.update()
+            FrameListView.updateGeometry()
+            FrameListView.repaint()
+            Window.update()
+            Window.repaint()
+            """
+
+        if event.buttons() & QtCore.Qt.RightButton:
+            self.pixels.Pixels[y][x] = 0
+            for idx in FrameListView.selectedIndexes():
+                FrameListModel.Frames[idx.row()].Pixels.Pixels[y][x] = 0
+                FrameListModel.update_icon(idx)
+                print(idx.row(), 'Drawable', x, y, FrameListModel.Frames[idx.row()].Pixels.Pixels)
+#            super(FrameListView.__class__, FrameListView).mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+#            FrameListView.mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, event.pos(), event.button(), event.buttons(), QtCore.Qt.NoModifier))
+            """
+            FrameListView.update()
+            FrameListView.updateGeometry()
+            FrameListView.repaint()
+            Window.update()
+            Window.repaint()
+            Window.widget.update()
+            Window.widget.repaint()
+            """
+
+    def mouseReleaseEvent(self, event):
+        pass
+    def mouseDoubleClickEvent(self, event):
+        pass
+    @property
+    def Pixels(self): return self.pixels
+    @Pixels.setter
+    def Pixels(self, value):
+        #self.pixels = value
+        for y in range(value.Height):
+            for x in range(value.Width):
+                self.pixels.Pixels[y][x] = value.Pixels[y][x]
+    @property
+    def SaveAction(self): return self.actions['Save']
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            file_name = url.toLocalFile()
+            print("Dropped file: " + file_name)
+            self.Pixels.load(file_name)
+
+class BackgroundItem(QtWidgets.QGraphicsRectItem):
+    def __init__(self, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.size = 16
+        self.scale = 32
+        self.colors = [QtGui.QColor(196,196,196,255), QtGui.QColor(232,232,232,255)]
+    def paint(self, painter, option, widget):
+        for i in range(self.size*self.size):
+            x = (i % self.size)
+            y = (i // self.size)
+            color = QtGui.QColor(128,128,128,255) if 0 == (i % 2) and 0 == (x % 2) else QtGui.QColor(196,196,196,255)
+            painter.fillRect(x * (self.scale),               y * (self.scale),               self.scale//2, self.scale//2, self.colors[0])
+            painter.fillRect(x * (self.scale)+self.scale//2, y * (self.scale)+self.scale//2, self.scale//2, self.scale//2, self.colors[0])
+            painter.fillRect(x * (self.scale)+self.scale//2, y * (self.scale),               self.scale//2, self.scale//2, self.colors[1])
+            painter.fillRect(x * (self.scale),               y * (self.scale)+self.scale//2, self.scale//2, self.scale//2, self.colors[1])
+
+class GridItem(QtWidgets.QGraphicsRectItem):
+    def __init__(self, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.size = 16
+        self.scale = 32
+    def paint(self, painter, option, widget):
+        painter.fillRect(widget.rect(), QtGui.QBrush(QtGui.QColor(0,0,0,0), QtCore.Qt.SolidPattern))
+        lines = []
+        for y in range(self.size+1):
+            lines.append(QtCore.QLine(0, y*self.scale, self.size*self.scale, y*self.scale))
+        for x in range(self.size+1):
+            lines.append(QtCore.QLine(x*self.scale, 0, x*self.scale, self.size*self.scale))
+        painter.drawLines(lines)
+
+class Pixels:
+    def __init__(self):
+        self.width = 16
+        self.height = 16
+        self.pixels = numpy.zeros(self.width*self.height, dtype=int).reshape(self.height, self.width)
+    @property
+    def Pixels(self): return self.pixels
+    @property
+    def Width(self): return self.width
+    @property
+    def Height(self): return self.height
+    def save(self):
+        print(os.getcwd())
+        self.save_txt()
+        for ext in ('gif', 'png', 'webp'):
+            self.save_raster(ext)
+        for ext in ('gif', 'png', 'webp'):
+            self.save_animation(ext)
+#        AnimationWidget.update_icon()
+#        AnimationWidget.Movie.setDevice(QtCore.QFile('animation.gif'))
+#        AnimationWidget.Movie.start()
+#        AnimationWidget.update()
+        AnimationWidget.Label.update_frames()
+
+    def load(self, file_path):
+        ext = os.path.splitext(file_path)[1].lower()[1:]
+        if '' == ext: raise Exception('拡張子が必要です。png,gif,webp,txt形式のいずれかに対応しています。')
+        elif 'txt' == ext: self.load_txt(file_path)
+        elif 'gif' == ext: self.load_gif(file_path)
+        elif 'png' == ext: self.load_png(file_path)
+        elif 'webp' == ext: self.load_webp(file_path)
+        else: raise Exception('拡張子が未対応です。png,gif,webp,txt形式のいずれかに対応しています。')
+    def save_txt(self):
+        with open(os.path.join(os.getcwd(), 'pixels.txt'), 'w') as f:
+            f.write('\n'.join([''.join(map(str, self.pixels[y].tolist())) for y in range(self.height)]))
+    def load_txt(self, file_path):
+        with open(file_path, 'r') as f:
+            lines = f.read().split('\n')
+            self.height = len(lines)
+            self.width = len(lines[0])
+            self.pixels = numpy.zeros(self.width*self.height, dtype=int).reshape(self.height, self.width)
+            x = 0; y = 0;
+            for line in lines:
+                for c in line:
+                    self.pixels[y][x] = int(c, 16)
+                    x += 1
+                y += 1
+                x = 0
+
+    def save_raster(self, ext):
+        image = Image.new('1', (self.width, self.height))
+        image.putdata(self.pixels.reshape(self.width * self.height).tolist())
+        print(ext)
+        image.save(os.path.join(os.getcwd(), 'pixels.' + ext), optimize=True, lossless=True)
+
+    def save_animation(self, ext):
+        print(ext)
+        if len(FrameListView.Model.Frames) < 2: return
+        images = []
+        for frame in FrameListView.Model.Frames:
+            image = Image.new('P', (frame.Pixels.Width, frame.Pixels.Height))
+            image.putpalette([0,0,0,255,255,255])
+            image.putdata(frame.Pixels.Pixels.reshape(frame.Pixels.Width * frame.Pixels.Height).tolist())
+            images.append(image)
+
+        image.save(os.path.join(os.getcwd(), 'animation.' + ext), save_all=True, append_images=images, duration=AnimationDurationSetDialog.Duration, loop=AnimationDurationSetDialog.Loop, optimize=False)
+#        image.save(os.path.join(os.getcwd(), 'animation.' + ext), save_all=True, append_images=images, duration=100, loop=0, optimize=False)
+#        image.save(os.path.join(os.getcwd(), 'pixels.' + ext), optimize=True, lossless=True, save_all=True, append_images=images)
+
+    def load_png(self, file_path):
+        image = Image.open(file_path, mode='r')
+        image = image.convert('1')
+        print(len(image.getdata()), list(image.getdata()))
+        self.pixels = numpy.array(list(map(lambda x: 0 if 0 == x else 1, list(image.getdata())))).reshape(image.size[1], image.size[0])
+        self.width, self.height = image.size
+        print(self.width, self.height)
+    def load_gif(self, file_path): # 値が0/255で出力されてしまうので0/1に変換する
+        image = Image.open(file_path, mode='r')
+        self.width, self.height = image.size
+        self.pixels = numpy.array(list(map(lambda x: 0 if 0 == x else 1, list(image.getdata())))).reshape(self.height, self.width)
+    def load_webp(self, file_path): # 値が[0,0,0]/[255,255,255]で出力されてしまうので0/1に変換する
+        image = Image.open(file_path, mode='r')
+        self.width, self.height = image.size
+        self.pixels = numpy.array(list(map(lambda x: 0 if (0,0,0) == x else 1, list(image.getdata())))).reshape(self.height, self.width)
+
+class AnimationWidget(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+        """
+        self.movie_label = QtWidgets.QLabel()
+        self.movie = QtGui.QMovie(os.path.join(os.getcwd(), 'animation.gif'))
+#        self.movie.setDevice(QtCore.QFile('animation.gif'))
+        self.movie_label.setMovie(self.movie)
+        self.movie.start()
+        """
+
+        self.frame_list = FrameListView()
+        globals()['FrameListView'] = self.frame_list
+
+        self.label = AnimationLabel()
+        globals()['AnimationLabel'] = self.label
+
+        layout = QtWidgets.QBoxLayout(QtWidgets.QBoxLayout.LeftToRight)
+#        layout.addWidget(self.movie_label)
+        layout.addWidget(self.label)
+        layout.addWidget(self.frame_list)
+        self.setLayout(layout)
+
+        self.label.valueChanged(0)
+        self.label.start()
+
+#    @property
+#    def Movie(self): return self.movie
+    @property
+    def Label(self): return self.label
+    @property
+    def FrameListView(self): return self.frame_list
+    """
+    def update_icon(self):
+        # なぜかsetFormat()をエラー実行させないと正常にアニメ表示されない。実行しなかったり正常実行するとアニメされない。意味不明。
+#        self.movie.setFormat()
+        self.movie.setFormat(QtCore.QByteArray(b'GIF'))
+#        self.movie.setFormat(QtCore.QByteArray('GIF'))
+#        self.movie.setFormat(self.movie.format())
+        
+#        self.movie.setDevice(QtCore.QFile('animation.gif'))
+        self.movie.setDevice(QtCore.QBuffer(QtCore.QByteArray(open(os.path.join(os.getcwd(), 'animation.gif'), 'rb').read())))
+        self.movie_label.setMovie(self.movie)
+        self.movie.start()
+    """
+
+class AnimationLabel(QtWidgets.QLabel):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+#        self.movie = QtGui.QMovie(os.path.join(os.getcwd(), 'animation.gif'))
+##        self.movie.setDevice(QtCore.QFile('animation.gif'))
+#        self.setPixmap(self.FrameView.Model.Frames[0].Icon.pixmap())
+##        self.movie.start()
+
+        self.animation = QtCore.QVariantAnimation()
+        self.animation.setDuration(AnimationDurationSetDialog.Duration)
+        self.animation.setStartValue(0)
+        self.animation.setEndValue(FrameListView.Model.rowCount())
+        self.animation.valueChanged.connect(self.valueChanged)
+
+#        self.valueChanged(0)
+#        self.show()
+        """
+        self.animation = QtCore.QVariantAnimation(
+            self,
+            startValue=0.0,
+            endValue=len(self.FrameView.Model.rowCount()),
+            duration=AnimationDurationSetDialog.Duration,
+            valueChanged=self.on_valueChanged
+        )
+        setEndValue()
+        """
+
+        self.__timer = QtCore.QTimer()
+        self.__timer.setInterval(1000)
+        self.__timer.setSingleShot(True)
+        self.__timer.timeout.connect(self.start_animation)
+        self.__timer.start()
+#        self.loadFinished.connect(self.timerScreen.start)
+#        self.clicked.connect(self.valueChanged)
+        self.__frame_index = 0
+
+        self.start_animation()
+    def update_frames(self):
+        print('update_frames!!!!!!!!!!!!!!!!!!!!!!!', AnimationDurationSetDialog.Duration, FrameListView.Model.rowCount(), AnimationDurationSetDialog.Loop)
+        self.animation.setDuration(AnimationDurationSetDialog.Duration)
+        self.animation.setEndValue(FrameListView.Model.rowCount()-1)
+        self.animation.setLoopCount(AnimationDurationSetDialog.Loop)
+        self.start()
+
+    def start(self):
+        if self.animation.state() != QtCore.QAbstractAnimation.Running:
+            print('start!!!!!!!!!!!!!!!!!!!!!!!')
+            self.animation.start()
+         
+    @QtCore.Slot("QVariant")
+    def valueChanged(self, value):
+        print('valueChanged!!!!!!!!!!!!!!!!!!!!!!!')
+        self.setPixmap(FrameListView.Model.Frames[value].Icon.pixmap(16,16))
+
+    def mousePressEvent(self, event):
+        print('mousePressEvent!!!!!!!!!!!!!!!!!!!!!!!')
+        """
+        self.setPixmap(FrameListView.Model.Frames[self.__frame_index].Icon.pixmap(16,16))
+        if self.__frame_index < FrameListView.Model.rowCount()-1:
+            self.__frame_index += 1
+        else: self.__frame_index = 0
+        """
+        #self.__timer.start()
+        self.start_animation()
+
+    def start_animation(self):
+        print('start_animation!!!!!!!!!!!!!!!!!!!!!!!')
+        self.setPixmap(FrameListView.Model.Frames[self.__frame_index].Icon.pixmap(16,16))
+        if self.__frame_index < FrameListView.Model.rowCount()-1:
+            self.__frame_index += 1
+#            self.start_animation()
+#            QtCore.QTimer.singleShot(AnimationDurationSetDialog.Duration, self.start_animation)
+        else: self.__frame_index = 0
+        QtCore.QTimer.singleShot(AnimationDurationSetDialog.Duration, self.start_animation)
+"""
+self.movie_label = QtWidgets.QLabel()
+self.movie = QtGui.QMovie(os.path.join(os.getcwd(), 'animation.webp'))
+
+self.movie_label.setMovie(self.movie)
+self.movie.start()
+
+QPushButton button("Animated Button");
+button.show();
+self.animation = QtCore.QPropertyAnimation(button, "geometry");
+animation.setDuration(10000)
+animation.setStartValue(QtCore.QRect(0, 0, 100, 30))
+animation.setEndValue(QtCore.QRect(250, 250, 100, 30))
+
+animation.start();)
+
+class AnimationView(QtWidgets.QGraphicsView):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+        self.__scene = QtWidgets.QGraphicsScene()
+        self.__item = QtWidgets.QGraphicsItem()
+        self.__scene.addItem(self.__item)
+        self.setScene(self.__scene)
+    def mousePressEvent(self, event):
+        super(self.__class__, self).mousePressEvent(event)
+        self.scene().update()
+class AnimationItem(QtWidgets.QGraphicsItem):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+        self.timer = QtCore.QTimer(self)
+        self.timer.setInterval(AnimationDurationSetDialog.Duration)
+    def paint(self, painter, option, widget):
+        painter.fillRect(widget.rect(), QtGui.QBrush(QtGui.QColor(0,0,0,0), QtCore.Qt.SolidPattern))
+        for frame in FrameListView.Model.Frames:
+#            frame.Icon
+            sleep()
+            painter.drawPixmap(frame.Icon.pixmap(frame.Pixels.Width, frame.Pixels.Height))
+        for y in range(self.pixels.Height):
+            for x in range(self.pixels.Width):
+                if 1 == self.pixels.Pixels[y][x]:
+                    painter.fillRect(x*self.scale, y*self.scale, self.scale, self.scale, QtGui.QBrush( QtGui.QColor(255,0,0,128), QtCore.Qt.SolidPattern))
+"""
+
+class FrameListView(QtWidgets.QListView):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+        self.resizeContents(16*16, 16)
+        self.model = FrameListModel()
+        self.model.appendRow()
+        self.setModel(self.model)
+        globals()['FrameListModel'] = self.model
+        self.resize(16*32, 32)
+        self.actions = {}
+        self.__create_add_frame_action()
+        self.__create_delete_frame_action()
+        self.setCurrentIndex(self.model.index(0,0))
+        self.setFlow(QtWidgets.QListView.LeftToRight)
+        self.duration_dialog = AnimationDurationSetDialog()
+        globals()['AnimationDurationSetDialog'] = self.duration_dialog
+        self.show()
+    def mouseMoveEvent(self, event):
+        super(self.__class__, self).mousePressEvent(event)
+    def mousePressEvent(self, event):
+        super(self.__class__, self).mousePressEvent(event)
+        for idx in self.selectedIndexes():
+            frame = idx.data(QtCore.Qt.UserRole)
+            Drawable.Pixels = frame.Pixels
+            Window.widget.view.scene().update()
+        if event.buttons() & QtCore.Qt.RightButton:
+            self.duration_dialog.show()
+    def update_icon(self):
+        for idx in self.selectedIndexes():
+            self.model.update_icon(idx)
+        self.update()
+        self.repaint()
+    @property
+    def Model(self): return self.model
+    @property
+    def AddFrameAction(self): return self.actions['AddFrame']
+    @property
+    def DeleteFrameAction(self): return self.actions['DeleteFrame']
+    def __create_add_frame_action(self):
+        a = QtWidgets.QAction('Add frame')
+        a.setObjectName('AddFrame')
+        a.setShortcut('Ctrl+Alt+N')
+        a.triggered.connect(self.model.appendRow)
+        self.actions['AddFrame'] = a
+    def __create_delete_frame_action(self):
+        a = QtWidgets.QAction('Delete frame')
+        a.setObjectName('DeleteFrame')
+        a.setShortcut('Ctrl+Alt+D')
+        a.triggered.connect(self.__delete_frame)
+        self.actions['DeleteFrame'] = a
+    def __delete_frame(self):
+        if len(self.model.Frames) < 2: return
+        for idx in self.selectedIndexes():
+            if idx.row() == self.model.rowCount()-1:
+                self.setCurrentIndex(self.model.index(idx.row()-1,0))
+            else:
+                self.setCurrentIndex(self.model.index(idx.row(),0))
+            self.model.removeRow(idx)
+        for idx in self.selectedIndexes():
+            frame = idx.data(QtCore.Qt.UserRole)
+            Drawable.Pixels = frame.Pixels
+            Window.widget.view.scene().update()
+        AnimationWidget.Label.update_frames()
+#        self.update()
+
+class FrameListModel(QtCore.QAbstractListModel):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+        self.frames = []
+    def rowCount(self, parent=QtCore.QModelIndex()):
+        if parent.isValid(): return 0
+        return len(self.frames)
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if role == QtCore.Qt.DecorationRole:
+            return self.frames[index.row()].Icon
+        elif  role == QtCore.Qt.UserRole:
+            return self.frames[index.row()]
+    def appendRow(self):
+        self.beginInsertRows(QtCore.QModelIndex(), self.rowCount(), self.rowCount())
+        self.frames.append(Frame())
+        self.endInsertRows()
+    def removeRow(self, index):
+        self.beginRemoveRows(QtCore.QModelIndex(), self.rowCount(), self.rowCount())
+        print(index.row())
+        self.frames.pop(index.row())
+        self.endRemoveRows()
+    def update_icon(self, index):
+        self.frames[index.row()].update_icon()
+    @property
+    def Frames(self): return self.frames
+
+class Frame:
+    def __init__(self):
+        self.pixels = Pixels()
+        self.icon = QtGui.QImage(self.pixels.Width, self.pixels.Height, QtGui.QImage.Format_Mono)
+        self.update_icon()
+    def update_icon(self):
+        image = QtGui.QImage(self.pixels.Width, self.pixels.Height, QtGui.QImage.Format_Mono)
+        for y in range(self.pixels.Height):
+            for x in range(self.pixels.Width):
+                image.setPixel(x, y, self.pixels.Pixels[y][x])
+                if 1 < self.pixels.Pixels[y][x]: print(self.pixels.Pixels[y][x])
+        self.icon = QtGui.QIcon(QtGui.QPixmap.fromImage(image))
+    @property
+    def Pixels(self): return self.pixels
+    @Pixels.setter
+    def Pixels(self, value): self.pixels = value
+    @property
+    def Icon(self): return self.icon
+    @Icon.setter
+    def Icon(self, value): self.icon = value
+
+class AnimationDurationSetDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super(self.__class__, self).__init__(parent)
+        self.setWindowTitle("Set duration")
+        self.duration = QtWidgets.QSpinBox()
+        self.loop = QtWidgets.QSpinBox()
+        self.duration.setMinimum(0)
+        self.duration.setMaximum(1000*60*60*24)
+        self.duration.setSingleStep(1)
+        self.loop.setMinimum(0)
+        self.loop.setMaximum(2**30)
+        self.loop.setSingleStep(1)
+        self.duration.setValue(100)
+        self.loop.setValue(0)
+        layout = QtWidgets.QFormLayout()
+        layout.addRow("Duration", self.duration)
+        layout.addRow("Loop time", self.loop)
+        self.setLayout(layout)
+        self.x = self.geometry().x()
+        self.y = self.geometry().y()
+        self.w = 0
+        self.h = 0
+#        self.w = self.geometry().width()
+#        self.h = self.geometry().height()
+
+
+    def show(self):
+        self.setGeometry(self.x, self.y, self.w, self.h)
+        super(self.__class__, self).show()
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape:
+            self.x = self.geometry().x()
+            self.y = self.geometry().y()
+            self.w = self.geometry().width()
+            self.h = self.geometry().height()
+#            self.hide()
+        super(self.__class__, self).keyPressEvent(event)
+        
+    @property
+    def Duration(self): return self.duration.value()
+    @property
+    def Loop(self): return self.loop.value()
+
+if __name__ == "__main__":
+    app = QtWidgets.QApplication(sys.argv)
+#    a = AnimationDurationSetDialog()
+#    a.show()
+    window = Window()
+    sys.exit(app.exec_())
+
